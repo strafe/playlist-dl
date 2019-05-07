@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+
+# playlist-dl
+# Download YouTube playlists for safekeeping.
+
+readonly program="$(basename "$0")"
+readonly version='0.0.1'
+
+function usage() {
+    cat <<EOF
+Usage: $program [OPTIONS] <playlist_file>
+Download YouTube playlists for safekeeping.
+
+Options:
+    -h, --help      Output this message.
+    -v, --version   Output the current version.
+EOF
+}
+
+function args() {
+    case "$1" in
+    '') usage; exit ;;
+    -h | --help) usage; exit ;;
+    -v | --version) printf '%s version %s\n' "$program" "$version"; exit ;;
+    -*) printf 'Invalid option: %s\n' "$1" 1>&2; exit 1 ;;
+    esac
+    shift
+}
+
+function deps() {
+    local -r deps=("$@")
+    local missing_deps=()
+
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep" &>/dev/null; then
+            missing_deps+=("$dep")
+        fi
+    done
+
+    if [[ "${#missing_deps[@]}" -gt 0 ]]; then
+        printf 'Missing dependancy: %s\n' "${missing_deps[@]}" 1>&2; exit 1
+    fi
+}
+
+function playlist() {
+    local -r pname="$(echo "$1" | base64 --decode | jq -r '.name')"
+    local -r pid="$(echo "$1" | base64 --decode | jq -r '.playlist')"
+    printf 'Downloading playlist %s (%s)\n' "$pname" "$pid"
+
+    local -r pdir="${2}/${pid}_${pname}"
+    mkdir -p $pdir
+
+    for v in $(youtube-dl --flat-playlist -J "$pid" | jq -r '.entries[] | @base64'); do
+        video "$v" "$pdir"
+    done
+
+    printf 'Finished downloading playlist %s (%s)\n\n' "$pname" "$pid"
+}
+
+function video() {
+    local -r vtitle=$(echo "$1" | base64 --decode | jq -r '.title')
+    local -r vid=$(echo "$1" | base64 --decode | jq -r '.id')
+
+    local -r exists=$(find "$2" -type f -regex "^${2}/${vid}_.*")
+    if [[ -z "$exists" ]]; then
+        printf 'Downloading video %s (%s)\n' "$vtitle" "$vid"
+        youtube-dl -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4" "$vid" -o "${2}/%(id)s_%(title)s.%(ext)s" >/dev/null
+    else
+        printf 'Video %s (%s) already downloaded.\n' "$vtitle" "$vid"
+    fi
+}
+
+# https://stedolan.github.io/jq, https://ytdl-org.github.io/youtube-dl
+args "$@"
+deps 'jq' 'youtube-dl'
+
+readonly playlists="$1"
+readonly directory="$(dirname "$playlists")"
+
+for p in $(jq -r '.[] | @base64' "$playlists"); do
+    playlist "$p" "$directory"
+done

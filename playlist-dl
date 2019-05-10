@@ -4,7 +4,7 @@
 # Download YouTube playlists for safekeeping.
 
 readonly program="$(basename "$0")"
-readonly version='0.0.1'
+readonly version='0.0.2'
 
 function usage() {
     cat <<EOF
@@ -48,7 +48,7 @@ function playlist() {
     printf 'Downloading playlist %s (%s)\n' "$pname" "$pid"
 
     local -r pdir="${2}/${pid}_${pname}"
-    mkdir -p $pdir
+    mkdir -p "$pdir"
 
     for v in $(youtube-dl --flat-playlist -J "$pid" | jq -r '.entries[] | @base64'); do
         video "$v" "$pdir"
@@ -61,7 +61,7 @@ function video() {
     local -r vtitle=$(echo "$1" | base64 --decode | jq -r '.title')
     local -r vid=$(echo "$1" | base64 --decode | jq -r '.id')
 
-    local -r exists=$(find "$2" -type f -regex "^${2}/${vid}_.*")
+    local -r exists="$(find "$2" -type f -regex "^${2}/${vid}_.*")"
     if [[ -z "$exists" ]]; then
         printf 'Downloading video %s (%s)\n' "$vtitle" "$vid"
         youtube-dl -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4" "$vid" -o "${2}/%(id)s_%(title)s.%(ext)s" >/dev/null
